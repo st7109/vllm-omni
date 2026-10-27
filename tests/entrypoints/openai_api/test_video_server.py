@@ -2634,13 +2634,9 @@ def test_generator_device_pass_through(test_client, mocker: MockerFixture):
 
 @pytest.mark.parametrize(
     "generator_device",
-    ["cuda", "npu", ""],
+    ["cuda", "cuda:0", "npu", "not-a-device", ""],
 )
-def test_generator_device_rejects_non_cpu_devices(test_client, mocker: MockerFixture, generator_device: str):
-    mocker.patch(
-        "vllm_omni.entrypoints.openai.serving_video._encode_video_bytes",
-        return_value=b"fake-video",
-    )
+def test_generator_device_rejects_non_cpu_devices(test_client, generator_device: str):
     response = test_client.post(
         "/v1/videos",
         data={
@@ -2650,12 +2646,10 @@ def test_generator_device_rejects_non_cpu_devices(test_client, mocker: MockerFix
         },
     )
 
-    assert response.status_code == 200
-    video_id = response.json()["id"]
-    _wait_for_status(test_client, video_id, VideoGenerationStatus.COMPLETED.value)
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "generator_device"]
     engine = test_client.app.state.openai_serving_video._engine_client
-    captured_params = engine.captured_sampling_params_list[0]
-    assert captured_params.generator_device is None
+    assert engine.captured_sampling_params_list is None
 
 
 def test_invalid_lora_returns_400(test_client):
